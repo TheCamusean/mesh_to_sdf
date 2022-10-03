@@ -16,6 +16,7 @@ class BadMeshException(Exception):
 class SurfacePointCloud:
     def __init__(self, mesh, points, normals=None, scans=None):
         self.mesh = mesh
+        self.mesh_scale = mesh.scale
         self.points = points
         self.normals = normals
         self.scans = scans
@@ -104,12 +105,13 @@ class SurfacePointCloud:
 
     def sample_sdf_near_surface(self, number_of_points=500000, use_scans=True, sign_method='normal', normal_sample_count=11, min_size=0, return_gradients=False):
         query_points = []
-        surface_sample_count = int(number_of_points * 47 / 50) // 2
+        surface_sample_count = int(number_of_points * 46 / 50) // 2
         surface_points = self.get_random_surface_points(surface_sample_count, use_scans=use_scans)
 
-        query_points.append(surface_points + np.random.normal(scale=0.15, size=(surface_sample_count, 3)))
-        query_points.append(surface_points + np.random.normal(scale=0.055, size=(surface_sample_count, 3)))
-        query_points.append(surface_points + np.random.normal(scale=0.0055, size=(surface_sample_count, 3)))
+        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.45, size=(surface_sample_count, 3)))
+        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.15, size=(surface_sample_count, 3)))
+        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.055, size=(surface_sample_count, 3)))
+        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.0055, size=(surface_sample_count, 3)))
         
         unit_sphere_sample_count = number_of_points - surface_points.shape[0] * 2
         unit_sphere_points = sample_uniform_points_in_unit_sphere(unit_sphere_sample_count)
