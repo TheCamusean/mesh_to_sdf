@@ -4,7 +4,7 @@ from .surface_point_cloud import BadMeshException
 from .utils import scale_to_unit_cube, scale_to_unit_sphere, get_raster_points, check_voxels
 import trimesh
 
-def get_surface_point_cloud(mesh, surface_point_method='scan', bounding_radius=None, scan_count=100, scan_resolution=400, sample_point_count=10000000, calculate_normals=True):
+def get_surface_point_cloud(mesh, surface_point_method='scan', bounding_radius=None, scan_count=100, scan_resolution=400, sample_point_count=100000, calculate_normals=True):
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump().sum()
     if not isinstance(mesh, trimesh.Trimesh):
@@ -50,7 +50,7 @@ def mesh_to_voxels(mesh, voxel_resolution=64, surface_point_method='scan', sign_
 
 # Sample some uniform points and some normally distributed around the surface as proposed in the DeepSDF paper
 def sample_sdf_near_surface(mesh, number_of_points = 500000, surface_point_method='scan', sign_method='normal',
-                            scan_count=100, scan_resolution=400, sample_point_count=10000000, normal_sample_count=11, min_size=0,
+                            scan_count=100, scan_resolution=400, sample_point_count=100000, normal_sample_count=11, min_size=0,
                             return_gradients=False, get_pcloud_model=False):
     #mesh = scale_to_unit_sphere(mesh)
     
@@ -58,6 +58,8 @@ def sample_sdf_near_surface(mesh, number_of_points = 500000, surface_point_metho
         print("Incompatible methods for sampling points and determining sign, using sign_method='normal' instead.")
         sign_method = 'normal'
 
+    surface_point_method = 'sample'
     surface_point_cloud = get_surface_point_cloud(mesh, surface_point_method, 1, scan_count, scan_resolution, sample_point_count, calculate_normals=sign_method=='normal' or return_gradients)
+    print(surface_point_cloud.points.shape)
 
     return surface_point_cloud.sample_sdf_near_surface(number_of_points, surface_point_method=='scan', sign_method, normal_sample_count, min_size, return_gradients), surface_point_cloud

@@ -108,14 +108,14 @@ class SurfacePointCloud:
         surface_sample_count = int(number_of_points * 46 / 50) // 2
         surface_points = self.get_random_surface_points(surface_sample_count, use_scans=use_scans)
 
+        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*5., size=(surface_sample_count, 3)))
         query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.45, size=(surface_sample_count, 3)))
-        query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.15, size=(surface_sample_count, 3)))
         query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.055, size=(surface_sample_count, 3)))
         query_points.append(surface_points + np.random.normal(scale=self.mesh_scale*0.0055, size=(surface_sample_count, 3)))
         
-        unit_sphere_sample_count = number_of_points - surface_points.shape[0] * 2
-        unit_sphere_points = sample_uniform_points_in_unit_sphere(unit_sphere_sample_count)
-        query_points.append(unit_sphere_points)
+        # unit_sphere_sample_count = number_of_points - surface_points.shape[0] * 2
+        # unit_sphere_points = sample_uniform_points_in_unit_sphere(unit_sphere_sample_count)*self.mesh_scale
+        # query_points.append(unit_sphere_points)
         query_points = np.concatenate(query_points).astype(np.float32)
 
         if sign_method == 'normal':
@@ -178,6 +178,48 @@ def create_from_scans(mesh, bounding_radius=1, scan_count=100, scan_resolution=4
         normals=np.concatenate([scan.normals for scan in scans], axis=0) if calculate_normals else None,
         scans=scans
     )
+
+
+def get_hq_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_normals=True, phi=None, theta=None, n_scans=3):
+    if phi is None:
+        phi = np.random.rand()*2*math.pi
+    if theta is None:
+        theta = np.random.rand()*2*math.pi
+
+    thetas = np.linspace(-0.3, 0.3, n_scans) + theta
+    phis = np.linspace(-0.3, 0.3, n_scans) + phi
+    xx, yy = np.meshgrid(phis, thetas)
+    thetas = xx.reshape(-1)
+    phis = yy.reshape(-1)
+
+    P = np.zeros((0,3))
+    for i in range(thetas.shape[0]):
+        thetai = thetas[i]
+        phii = phis[i]
+
+        Pi = get_scan_view(mesh=mesh, bounding_radius=bounding_radius, scan_resolution=scan_resolution, calculate_normals=calculate_normals,
+                           phi=phii, theta=thetai)
+        P = np.concatenate((P, Pi),0)
+    return P
+
+def get_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_normals=True, phi=None, theta=None):
+
+    if phi is None:
+        phi = np.random.rand()*2*math.pi
+    if theta is None:
+        theta = np.random.rand()*2*math.pi
+
+    camera_transform = get_camera_transform_looking_at_origin(phi, theta, camera_distance=2 * bounding_radius)
+    P = Scan(mesh,
+        camera_transform=camera_transform,
+        resolution=scan_resolution,
+        calculate_normals=calculate_normals,
+        fov=1.0472,
+        z_near=bounding_radius * 1,
+        z_far=bounding_radius * 3
+    )
+    return P.points
+
 
 def sample_from_mesh(mesh, sample_point_count=10000000, calculate_normals=True):
     if calculate_normals:
