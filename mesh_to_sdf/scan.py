@@ -1,5 +1,8 @@
+import time
+
+import math
 import numpy as np
-from .pyrender_wrapper import render_normal_and_depth_buffers
+from .pyrender_wrapper import render_normal_and_depth_buffers, Renderer
 import pyrender
 from scipy.spatial.transform import Rotation
 from skimage import io
@@ -41,6 +44,84 @@ def get_camera_transform(position, look_direction):
 
     return np.matmul(translation, rotation)
 
+class ScanPointcloud():
+    def __init__(self):
+        self.renderer = Renderer()
+
+    def scan_pointcloud(self, mesh, camera_transform, resolution=400, calculate_normals=True, fov=1, z_near=0.1, z_far=10):
+        camera_position = np.matmul(camera_transform, np.array([0, 0, 0, 1]))[:3]
+        camera = pyrender.PerspectiveCamera(yfov=fov, aspectRatio=1.0, znear=z_near, zfar=z_far)
+        projection_matrix = camera.get_projection_matrix()
+
+        #time0 = time.time()
+        color, depth = self.renderer.render_normal_and_depth_buffers(mesh, camera, camera_transform, resolution)
+        #print('Time in Pyrender {}s'.format(time.time() - time0))
+
+        normal_buffer = color if calculate_normals else None
+        depth_buffer = depth.copy()
+
+        indices = np.argwhere(depth != 0)
+        depth[depth == 0] = float('inf')
+
+        # This reverts the processing that pyrender does and calculates the original depth buffer in clipping space
+        depth = (z_far + z_near - (2.0 * z_near * z_far) / depth) / (z_far - z_near)
+
+        points = np.ones((indices.shape[0], 4))
+        points[:, [1, 0]] = indices.astype(float) / (resolution - 1) * 2 - 1
+        points[:, 1] *= -1
+        points[:, 2] = depth[indices[:, 0], indices[:, 1]]
+
+        clipping_to_world = np.matmul(camera_transform, np.linalg.inv(projection_matrix))
+
+        points = np.matmul(points, clipping_to_world.transpose())
+        points /= points[:, 3][:, np.newaxis]
+        return points[:, :3]
+
+    def get_hq_scan_view(self, mesh, bounding_radius=1, scan_resolution=400, calculate_normals=False, phi=None, theta=None,
+                         n_scans=2):
+        if phi is None:
+            phi = np.random.rand() * 2 * math.pi
+        if theta is None:
+            theta = np.random.rand() * 2 * math.pi
+
+        thetas = np.linspace(-0.3, 0.3, n_scans) + theta
+        phis = np.linspace(-0.3, 0.3, n_scans) + phi
+        xx, yy = np.meshgrid(phis, thetas)
+        thetas = xx.reshape(-1)
+        phis = yy.reshape(-1)
+
+        P = np.zeros((0, 3))
+        for i in range(thetas.shape[0]):
+            thetai = thetas[i]
+            phii = phis[i]
+
+            #time0 = time.time()
+            Pi = self.get_scan_view(mesh=mesh, bounding_radius=bounding_radius, scan_resolution=scan_resolution,
+                               calculate_normals=calculate_normals,
+                               phi=phii, theta=thetai)
+            #print('One Scan takes {}s'.format(time.time() - time0))
+            P = np.concatenate((P, Pi), 0)
+        return P
+
+    def get_scan_view(self, mesh, bounding_radius=1, scan_resolution=400, calculate_normals=True, phi=None, theta=None):
+
+        if phi is None:
+            phi = np.random.rand() * 2 * math.pi
+        if theta is None:
+            theta = np.random.rand() * 2 * math.pi
+
+        camera_transform = get_camera_transform_looking_at_origin(phi, theta, camera_distance=2 * bounding_radius)
+        P = self.scan_pointcloud(mesh,
+                            camera_transform=camera_transform,
+                            resolution=scan_resolution,
+                            calculate_normals=calculate_normals,
+                            fov=1.0472,
+                            z_near=bounding_radius * 1,
+                            z_far=bounding_radius * 3
+                            )
+        return P
+
+
 '''
 A virtual laser scan of an object from one point in space.
 This renders a normal and depth buffer and reprojects it into a point cloud.
@@ -55,7 +136,9 @@ class Scan():
         camera = pyrender.PerspectiveCamera(yfov=fov, aspectRatio=1.0, znear = z_near, zfar = z_far)
         self.projection_matrix = camera.get_projection_matrix()
 
+        time0 = time.time()
         color, depth = render_normal_and_depth_buffers(mesh, camera, self.camera_transform, resolution)
+        print('Time in Pyrender {}s'.format(time.time() - time0))
 
         self.normal_buffer = color if calculate_normals else None
         self.depth_buffer = depth.copy()

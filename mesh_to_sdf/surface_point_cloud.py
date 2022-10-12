@@ -1,4 +1,6 @@
-from .scan import Scan, get_camera_transform_looking_at_origin
+import time
+
+from .scan import Scan, get_camera_transform_looking_at_origin, ScanPointcloud
 from .utils import sample_uniform_points_in_unit_sphere
 from .utils import get_raster_points, check_voxels
 
@@ -180,7 +182,7 @@ def create_from_scans(mesh, bounding_radius=1, scan_count=100, scan_resolution=4
     )
 
 
-def get_hq_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_normals=True, phi=None, theta=None, n_scans=3):
+def get_hq_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_normals=False, phi=None, theta=None, n_scans=2):
     if phi is None:
         phi = np.random.rand()*2*math.pi
     if theta is None:
@@ -197,8 +199,10 @@ def get_hq_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_nor
         thetai = thetas[i]
         phii = phis[i]
 
+        time0 = time.time()
         Pi = get_scan_view(mesh=mesh, bounding_radius=bounding_radius, scan_resolution=scan_resolution, calculate_normals=calculate_normals,
                            phi=phii, theta=thetai)
+        print('One Scan takes {}s'.format(time.time() - time0))
         P = np.concatenate((P, Pi),0)
     return P
 
@@ -210,7 +214,7 @@ def get_scan_view(mesh, bounding_radius=1, scan_resolution=400, calculate_normal
         theta = np.random.rand()*2*math.pi
 
     camera_transform = get_camera_transform_looking_at_origin(phi, theta, camera_distance=2 * bounding_radius)
-    P = Scan(mesh,
+    P = scan_pointcloud(mesh,
         camera_transform=camera_transform,
         resolution=scan_resolution,
         calculate_normals=calculate_normals,

@@ -5,6 +5,8 @@
 
 import os
 import sys
+import time
+
 if 'pyrender' in sys.modules:
     raise ImportError('The mesh_to_sdf package must be imported before pyrender is imported.')
 if 'OpenGL' in sys.modules:
@@ -55,9 +57,39 @@ def render_normal_and_depth_buffers(mesh, camera, camera_transform, resolution):
     scene.add(pyrender.Mesh.from_trimesh(mesh, smooth = False))
     scene.add(camera, pose=camera_transform)
 
+    timea = time.time()
     renderer = pyrender.OffscreenRenderer(resolution, resolution)
     renderer._renderer._program_cache = CustomShaderCache()
-
+    timeb = time.time()
     color, depth = renderer.render(scene, flags=pyrender.RenderFlags.SKIP_CULL_FACES)
+    timec = time.time()
+    print('AB {}s'.format(timeb - timea))
+    print('BC {}s'.format(timec - timeb))
+
+
     suppress_multisampling = False
     return color, depth
+
+
+class Renderer():
+    def __init__(self, resolution=400):
+        self.renderer = pyrender.OffscreenRenderer(resolution, resolution)
+        self.renderer._renderer._program_cache = CustomShaderCache()
+
+    def render_normal_and_depth_buffers(self, mesh, camera, camera_transform, resolution):
+        global suppress_multisampling
+        suppress_multisampling = True
+        scene = pyrender.Scene()
+        scene.add(pyrender.Mesh.from_trimesh(mesh, smooth=False))
+        scene.add(camera, pose=camera_transform)
+
+        #self.renderer = pyrender.OffscreenRenderer(resolution, resolution)
+        self.renderer._renderer._program_cache = CustomShaderCache()
+
+        #timeb = time.time()
+        color, depth = self.renderer.render(scene, flags=pyrender.RenderFlags.SKIP_CULL_FACES)
+        #timec = time.time()
+        #print('BC {}s'.format(timec - timeb))
+
+        suppress_multisampling = False
+        return color, depth
